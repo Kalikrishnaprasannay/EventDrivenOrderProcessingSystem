@@ -1,84 +1,83 @@
-# Event-Driven Order Processing System
+# Event-Driven Order Processing System 🚀
 
-A production-grade microservices system built with Spring Boot, Kafka, and Redis.
+A production-grade, high-throughput microservices system built with **Spring Boot**, **Apache Kafka**, and **Redis**. This project demonstrates a resilient architecture for handling order processing with strong guarantees on consistency and fault tolerance.
 
-## Architecture Highlights
-- **Order Service**: Entry point (Port 8081). Persists orders to H2 and emits `OrderCreatedEvent`.
-- **Payment Service**: Consumer (Port 8082). Implements **Idempotency** via Redis and **Retry/DLQ** for failure handling.
-- **Notification Service**: Consumer (Port 8083). Logs final success notifications.
-- **Kafka**: Message broker for decoupled, asynchronous communication.
-- **Redis**: Distributed lock/state for ensuring exactly-once processing (idempotency).
+## 🏗️ Architecture Overview
 
-## Project Structure
+The system consists of several microservices communicating asynchronously via Kafka:
+
+-   **API Gateway** (Port `8080`): The single entry point for all client requests. Handles routing and cross-cutting concerns.
+-   **Order Service** (Port `8081`): Orchestrates order creation, persists data to H2, and emits `OrderCreatedEvent`.
+-   **Payment Service** (Port `8082`): Subscribes to `OrderCreatedEvent`. Implements **Idempotency** via Redis to prevent double-charging and handles payment logic.
+-   **Notification Service** (Port `8083`): Final consumer that processes events to send user notifications.
+-   **Kafka & Zookeeper**: Distributed event streaming platform for decoupled communication.
+-   **Redis**: Used for distributed locking and idempotency checks.
+
+## 📁 Project Structure
+
 ```text
 .
-├── docker-compose.yml          # Infrastructure (Kafka, Zookeeper, Redis, Kafka UI)
-├── pom.xml                     # Parent Maven Project
-├── order-service/              # Order Service implementation
-├── payment-service/            # Payment Service implementation
-├── notification-service/       # Notification Service implementation
-└── k6/                         # Load testing script
+├── gateway-service/         # Spring Cloud Gateway (Entry Point)
+├── order-service/           # Order management & Event publisher
+├── payment-service/         # Payment processing & Idempotency logic
+├── notification-service/    # Notification & Logging consumer
+├── k6/                      # Load testing scripts for performance validation
+├── docker-compose.yml       # Infrastructure setup (Kafka, Redis, Kafka UI)
+└── pom.xml                  # Parent Maven Project
 ```
 
-## Setup & Running
+## 🛠️ Setup & Running
 
 ### 1. Start Infrastructure
-Ensure Docker is running, then execute:
+Ensure Docker is running, then launch the required middleware:
 ```bash
 docker-compose up -d
 ```
-You can access **Kafka UI** at `http://localhost:8080` to monitor topics.
+-   **Kafka UI**: Access at [http://localhost:9000](http://localhost:9000) to monitor topics and messages.
+-   **Redis**: Running on port `6379`.
 
-### 2. Build and Run Services
-Run each service from its respective directory or via terminal:
+### 2. Run Microservices
+You can run all services using Maven from the root directory:
 ```bash
-# Order Service
+# Gateway Service (Required for routing)
+mvn spring-boot:run -pl gateway-service
+
+# Business Services
 mvn spring-boot:run -pl order-service
-
-# Payment Service
 mvn spring-boot:run -pl payment-service
-
-# Notification Service
 mvn spring-boot:run -pl notification-service
 ```
 
-## Testing
+## 🧪 Testing the System
 
-### Manual Testing
-Send a POST request to create an order:
+### Manual Testing (via API Gateway)
+Route your requests through the Gateway (Port `8080`):
 ```bash
-curl -X POST http://localhost:8081/orders \
+curl -X POST http://localhost:8080/orders \
 -H "Content-Type: application/json" \
 -d '{"customerId": "USER_123", "amount": 150.00}'
 ```
 
 ### Idempotency Verification
-The Payment Service uses Redis to ensure an order is only processed once. If the same `OrderCreatedEvent` is re-delivered (e.g., due to network jitter), the service will detect the `orderId` in Redis and skip processing.
+The **Payment Service** ensures exactly-once processing. If a message is retried or duplicated:
+1.  The service checks Redis for the `orderId`.
+2.  If already processed, it logs a "Duplicate detected" message and skips the transaction.
 
-### Error Handling & DLQ
-If the `amount` is exactly `999.99`, the Payment Service will simulate a failure.
-1. It will retry **3 times** (with 2s backoff).
-2. If it still fails, the message will be moved to `order-topic.DLT`.
+### Resiliency: Error Handling & DLQ
+The system is designed to handle failures gracefully:
+-   **Retry Logic**: If the `amount` is `999.99`, the Payment Service fails and retries **3 times** with a 2s backoff.
+-   **Dead Letter Queue (DLQ)**: After exhausted retries, the message is moved to `order-topic.DLT` for manual inspection, ensuring no data loss.
 
 ### Load Testing
-Run the provided k6 script (requires k6 installed):
+Validate system performance under heavy load using **k6**:
 ```bash
 k6 run k6/load-test.js
 ```
 
-## Technical Explanation
+## 🛡️ Key Technical Features
 
-### 1. How Idempotency Works
-We use a **Redis-based Distributed Lock** strategy. Before processing, we call `SETNX` (set if absent) with the `orderId`.
-- If successful: Proceed with payment.
-- If failed: An entry already exists, meaning another instance is already processing or has finished this order.
+-   **Idempotency Path**: Uses a `SETNX` strategy in Redis to ensure a distributed lock/state for every order ID.
+-   **Non-Blocking I/O**: Leverages Spring Cloud Gateway for efficient request routing.
+-   **Observability**: Integrated with Kafka UI for real-time stream monitoring.
+-   **Scalability**: All services are stateless; Kafka partitions allow for horizontal scaling of consumers.
 
-### 2. How Retry and DLQ work
-Spring Kafka's `DefaultErrorHandler` is configured with a `FixedBackOff`.
-- **Retry**: On exception, the consumer pauses and waits before trying again.
-- **DLQ**: If retries are exhausted, the `DeadLetterPublishingRecoverer` republishes the message to a special `.DLT` topic. This prevents "poison pill" messages from blocking the main partition.
-
-### 3. Scaling for Millions of Requests
-- **Kafka Partitions**: Increase partitions for `order-topic`. Each partition can be consumed by one instance in a consumer group, allowing linear scaling.
-- **Redis Clustering**: Ensure Redis is clustered to handle high-frequency idempotency checks.
-- **Stateless Services**: All services are stateless and can be horizontally scaled using Kubernetes pods.
