@@ -28,6 +28,19 @@ spring:
               type:
                 headers: false
 
+security:
+  jwt:
+    secret: change-me-32-characters-long-key!
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
 logging:
   level:
     com.eventdriven: DEBUG

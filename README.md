@@ -58,6 +58,21 @@ curl -X POST http://localhost:8080/orders \
 -d '{"customerId": "USER_123", "amount": 150.00}'
 ```
 
+### Order Service API Endpoints
+- `POST /orders` : create a new order
+- `GET /orders` : list all orders
+- `GET /orders/{orderId}` : retrieve a single order
+- `POST /auth/token` : generate a demo JWT token for authenticated calls
+
+### Swagger / OpenAPI
+Order Service API documentation is available at:
+- `http://localhost:8081/swagger-ui/index.html`
+- `http://localhost:8081/v3/api-docs`
+
+### Authentication
+The Order Service is protected by JWT authentication for all `/orders/**` endpoints.
+Use the demo auth endpoint to request a token and include it in `Authorization: Bearer <token>`.
+
 ### Idempotency Verification
 The **Payment Service** ensures exactly-once processing. If a message is retried or duplicated:
 1.  The service checks Redis for the `orderId`.

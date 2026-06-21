@@ -10,6 +10,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -28,7 +31,6 @@ public class OrderService {
                 .status("PENDING")
                 .build();
 
-        order.generateOrderId();
         orderRepository.save(order);
 
         OrderCreatedEvent event = OrderCreatedEvent.builder()
@@ -43,5 +45,13 @@ public class OrderService {
         log.info("Published OrderCreatedEvent for Order ID: {}", order.getOrderId());
 
         return order;
+    }
+
+    public Optional<Order> findByOrderId(String orderId) {
+        return orderRepository.findByOrderId(orderId);
+    }
+
+    public List<Order> listOrders() {
+        return orderRepository.findAll();
     }
 }
